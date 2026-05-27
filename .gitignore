@@ -1,0 +1,53 @@
+# ========================
+# IntelliJ IDEA
+# ========================
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+.idea_modules/
+
+# ========================
+# Claude
+# ========================
+.claude/
+CLAUDE.md
+
+# ========================
+# Environment / Secrets
+# ========================
+.env
+!.env.example
+
+# ========================
+# Java / Maven / Gradle
+# ========================
+target/
+build/
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+# ========================
+# Docker
+# ========================
+docker-compose.override.yml
+
+# ========================
+# OS
+# ========================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ========================
+# Logs
+# ========================
+*.log
+logs/

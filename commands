@@ -1,0 +1,3 @@
+TOKEN=$(curl -k -s -X POST https://localhost/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"john_doe","password":"Pass@1234"}')

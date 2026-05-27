@@ -1,0 +1,128 @@
+{
+  "realm": "demo-realm",
+  "enabled": true,
+  "sslRequired": "none",
+  "displayName": "Security Demo Realm",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": false,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "maxFailureWaitSeconds": 900,
+  "waitIncrementSeconds": 60,
+  "quickLoginCheckMilliSeconds": 1000,
+  "maxDeltaTimeSeconds": 43200,
+  "failureFactor": 5,
+  "accessTokenLifespan": 900,
+  "revokeRefreshToken": true,
+  "refreshTokenMaxReuse": 0,
+  "accessCodeLifespan": 60,
+  "defaultSignatureAlgorithm": "RS256",
+  "roles": {
+    "realm": [
+      {
+        "name": "USER",
+        "description": "Standard user role",
+        "composite": false,
+        "clientRole": false,
+        "containerId": "demo-realm"
+      },
+      {
+        "name": "MODERATOR",
+        "description": "Moderator role with elevated permissions",
+        "composite": false,
+        "clientRole": false,
+        "containerId": "demo-realm"
+      },
+      {
+        "name": "ADMIN",
+        "description": "Administrator role with full access",
+        "composite": false,
+        "clientRole": false,
+        "containerId": "demo-realm"
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "demo-app",
+      "name": "Demo Application",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "demo-app-secret",
+      "publicClient": false,
+      "bearerOnly": false,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "protocol": "openid-connect",
+      "fullScopeAllowed": true,
+      "defaultClientScopes": [
+        "web-origins",
+        "acr",
+        "roles",
+        "profile",
+        "email"
+      ],
+      "optionalClientScopes": [
+        "address",
+        "phone",
+        "offline_access",
+        "microprofile-jwt"
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "admin_user",
+      "email": "admin@demo.com",
+      "firstName": "Admin",
+      "lastName": "User",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "Admin@123!",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["USER", "MODERATOR", "ADMIN"]
+    },
+    {
+      "username": "moderator_user",
+      "email": "moderator@demo.com",
+      "firstName": "Moderator",
+      "lastName": "User",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "Mod@123!",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["USER", "MODERATOR"]
+    },
+    {
+      "username": "regular_user",
+      "email": "user@demo.com",
+      "firstName": "Regular",
+      "lastName": "User",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "User@123!",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["USER"]
+    }
+  ]
+}

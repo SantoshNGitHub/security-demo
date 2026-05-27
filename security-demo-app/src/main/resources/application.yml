@@ -1,0 +1,55 @@
+spring:
+  application:
+    name: security-demo
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Spring validates tokens against Keycloak's JWKS and checks the issuer claim
+          issuer-uri: ${KEYCLOAK_URL:http://localhost:8180}/realms/demo-realm
+          jwk-set-uri: ${KEYCLOAK_URL:http://localhost:8180}/realms/demo-realm/protocol/openid-connect/certs
+
+keycloak:
+  server-url:      ${KEYCLOAK_URL:http://localhost:8180}
+  realm:           demo-realm
+  admin-client-id: admin-cli
+  admin-username:  admin
+  admin-password:  ${KEYCLOAK_ADMIN_PASSWORD:admin_secret}
+  client-id:       demo-app
+  client-secret:   ${KEYCLOAK_CLIENT_SECRET:demo-app-secret}
+
+app:
+  security:
+    jwt:
+      client-id:           demo-app
+      principal-attribute: preferred_username
+  cors:
+    # Comma-separated list of allowed origins
+    allowed-origins: http://localhost:3000,https://yourdomain.com
+  rate-limit:
+    # Login/signup bucket: 10 tokens, refills 10 per minute
+    login-capacity:       10
+    login-refill-per-min: 10
+    # General API bucket: 60 tokens, refills 60 per minute
+    api-capacity:         60
+    api-refill-per-min:   60
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+
+logging:
+  level:
+    com.demo.security:           INFO
+    org.springframework.security: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level [%X{requestId}] %logger{36} - %msg%n"
