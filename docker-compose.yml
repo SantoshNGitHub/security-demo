@@ -76,6 +76,29 @@ services:
       start_period: 40s
     restart: unless-stopped
 
+  product-service:
+    build:
+      context: ./product-service
+      dockerfile: Dockerfile
+    container_name: product-service
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      KEYCLOAK_URL: http://keycloak:8080
+    ports:
+      - "5006:5006"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    networks:
+      - security-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8081/actuator/health || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    restart: unless-stopped
+
   nginx:
     build:
       context: ./nginx
@@ -86,6 +109,8 @@ services:
       - "443:443"
     depends_on:
       security-app:
+        condition: service_healthy
+      product-service:
         condition: service_healthy
     networks:
       - security-net

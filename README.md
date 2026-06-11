@@ -144,6 +144,187 @@ curl -k -X POST https://localhost/api/auth/logout \
 
 ---
 
+## Request Flows
+
+### Signup Flow
+
+**Request**
+```
+POST https://localhost/api/auth/signup
+Content-Type: application/json
+
+{
+  "username": "john_doe",
+  "email": "john@example.com",
+  "password": "Pass@1234",
+  "firstName": "John",
+  "lastName": "Doe",
+  "role": "USER"
+}
+```
+
+**Step-by-step**
+
+```
+Client
+  │  HTTPS POST /api/auth/signup
+  ▼
+Nginx                        — terminates SSL, forwards to security-app:8080
+  │
+  ▼
+AuditLogFilter               — generates requestId (UUID), attaches to MDC + X-Request-ID header
+  │
+  ▼
+RateLimitFilter              — 10 req/min per IP (Bucket4j); returns HTTP 429 if exceeded
+  │
+  ▼
+Spring Security              — /api/auth/** is permitAll(); no token required, passes through
+  │
+  ▼
+AuthController.signup()      — @Valid triggers bean validation on SignupRequest
+  │  ✖ invalid → GlobalExceptionHandler.handleValidation() → HTTP 400 + field errors
+  │  ✔ valid   ↓
+  ▼
+AuthService.signup()         — thin delegate, calls KeycloakAdminService.createUser()
+  │
+  ▼
+KeycloakAdminService.createUser()
+  ├─ usersResource.search(username, exact=true)   — duplicate check → HTTP 409 if exists
+  ├─ builds CredentialRepresentation              — type=password, temporary=false
+  ├─ builds UserRepresentation                    — username, email, name, enabled=true
+  ├─ usersResource.create(user)                   — POST /admin/realms/demo-realm/users
+  │   ✖ status != 201 → HTTP 500
+  │   ✔ status == 201 → extractUserId() reads Location header
+  └─ assignRealmRole(userId, "USER")              — attaches realm role in Keycloak
+  │
+  ▼
+Keycloak                     — stores user in PostgreSQL, hashes password (pbkdf2-sha256)
+  │
+  ▼
+AuthController               — returns HTTP 201 Created
+                               { "success": true, "message": "User registered successfully..." }
+```
+
+**Classes & methods involved**
+
+| Class | Method | Role |
+|---|---|---|
+| `AuditLogFilter` | `doFilterInternal()` | Assigns request ID, logs method/URI/status/duration |
+| `RateLimitFilter` | `doFilterInternal()`, `clientIp()` | Enforces 10 req/min per IP on auth endpoints |
+| `SecurityConfig` | `securityFilterChain()` | Permits `/api/auth/**` without a token |
+| `SignupRequest` | Bean validation annotations | Validates username, email, password strength, role |
+| `GlobalExceptionHandler` | `handleValidation()`, `handleResponseStatus()` | Returns 400 on bad input, 409 on duplicate |
+| `AuthController` | `signup()` | Entry point — validates, delegates, returns 201 |
+| `AuthService` | `signup()` | Delegates to `KeycloakAdminService` |
+| `KeycloakAdminService` | `createUser()` | Duplicate check, builds user, calls Keycloak Admin API |
+| `KeycloakAdminService` | `extractUserId()` | Parses `Location` header to get new user's ID |
+| `KeycloakAdminService` | `assignRealmRole()` | Attaches `USER`/`MODERATOR` realm role to the user |
+
+---
+
+### Login Flow
+
+**Request**
+```
+POST https://localhost/api/auth/login
+Content-Type: application/json
+
+{ "username": "regular_user", "password": "User@123!" }
+```
+
+**Step-by-step**
+
+```
+Client
+  │  HTTPS POST /api/auth/login
+  ▼
+Nginx                        — terminates SSL, forwards to security-app:8080
+  │
+  ▼
+AuditLogFilter               — generates requestId, starts duration timer
+  │
+  ▼
+RateLimitFilter              — 10 req/min per IP; HTTP 429 if exceeded
+  │
+  ▼
+Spring Security              — /api/auth/** is permitAll(); passes through
+  │
+  ▼
+AuthController.login()       — @Valid checks @NotBlank on username + password
+  │  ✖ blank fields → GlobalExceptionHandler.handleValidation() → HTTP 400
+  │  ✔ valid        ↓
+  ▼
+AuthService.login()
+  ├─ builds form body:
+  │   grant_type=password, client_id=demo-app, client_secret=...,
+  │   username=regular_user, password=User@123!, scope=openid profile email
+  ├─ tokenUrl() → http://keycloak:8080/realms/demo-realm/protocol/openid-connect/token
+  └─ restTemplate.exchange(tokenUrl, POST, body, TokenResponse.class)
+      │
+      ▼
+    Keycloak (internal Docker network)
+      ├─ validates client_id + client_secret
+      ├─ looks up user in PostgreSQL
+      ├─ verifies password hash
+      └─ issues tokens:
+          ├─ access_token  (JWT RS256, expires 15 min)
+          └─ refresh_token (JWT, expires 30 min)
+      │
+      ├─ ✖ wrong credentials → HTTP 401
+      │     HttpClientErrorException caught in AuthService
+      │     → throws AuthException("Invalid username or password")
+      │     → GlobalExceptionHandler.handleGeneric() → HTTP 500
+      │
+      └─ ✔ HTTP 200 → TokenResponse mapped via @JsonProperty
+  │
+  ▼
+AuthController               — wraps in ApiResponse, returns HTTP 200
+                               { access_token, refresh_token, expires_in, ... }
+  │
+  ▼
+AuditLogFilter (finally)     — logs: POST /api/auth/login | status=200 | ip=... | 312ms
+```
+
+**Classes & methods involved**
+
+| Class | Method | Role |
+|---|---|---|
+| `AuditLogFilter` | `doFilterInternal()` | Request ID, full request lifecycle logging |
+| `RateLimitFilter` | `doFilterInternal()`, `clientIp()`, `buildBucket()` | Token-bucket rate limiting per IP |
+| `SecurityConfig` | `securityFilterChain()` | `/api/auth/**` is `permitAll()` |
+| `LoginRequest` | `@NotBlank` annotations | Minimal validation — just ensures fields are present |
+| `AuthController` | `login()` | Entry point — validates, delegates, wraps response |
+| `AuthService` | `login()`, `tokenUrl()`, `formHeaders()` | Builds and sends OIDC password grant to Keycloak |
+| `TokenResponse` | `@JsonProperty` fields | Maps Keycloak's snake_case JSON to Java fields |
+| `GlobalExceptionHandler` | `handleValidation()`, `handleGeneric()` | 400 on blank fields, 500 on auth failure |
+
+**What's inside the JWT access token**
+
+```json
+{
+  "iss": "http://keycloak:8080/realms/demo-realm",
+  "sub": "c1147de5-f442-4e95-...",
+  "preferred_username": "regular_user",
+  "realm_access": { "roles": ["USER"] },
+  "exp": 1779876970,
+  "scope": "email profile"
+}
+```
+
+Use this token as `Authorization: Bearer <access_token>` on all subsequent protected API calls.
+
+**Signup vs Login — key differences**
+
+| | Signup | Login |
+|---|---|---|
+| Keycloak interaction | Admin Client API (creates user) | Standard OIDC token endpoint |
+| Class used | `KeycloakAdminService` | `AuthService` (RestTemplate) |
+| Keycloak endpoint | `POST /admin/realms/.../users` | `POST /realms/.../openid-connect/token` |
+| Returns | HTTP 201, no token | HTTP 200, JWT access + refresh tokens |
+| Input validation | Heavy — regex on all fields | Minimal — `@NotBlank` only |
+
+---
+
 ## Security Practices Implemented
 
 ### Authentication & Authorization

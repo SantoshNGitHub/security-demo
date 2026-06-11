@@ -1,0 +1,38 @@
+spring:
+  application:
+    name: product-service
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Validates every incoming JWT against Keycloak's public key.
+          # This service never issues tokens — it only verifies them.
+          issuer-uri: ${KEYCLOAK_URL:http://localhost:8180}/realms/demo-realm
+          jwk-set-uri: ${KEYCLOAK_URL:http://localhost:8180}/realms/demo-realm/protocol/openid-connect/certs
+
+app:
+  security:
+    jwt:
+      principal-attribute: preferred_username
+  cors:
+    allowed-origins: http://localhost:3000,https://yourdomain.com
+
+server:
+  port: 8081
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when-authorized
+
+logging:
+  level:
+    com.demo.product: INFO
+    org.springframework.security: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level [%X{requestId}] %logger{36} - %msg%n"
